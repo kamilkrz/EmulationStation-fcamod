@@ -20,6 +20,7 @@ if(GLES)
     set(GLSystem "Embedded OpenGL" CACHE STRING "The OpenGL system to be used")
 elseif(GL)
     set(GLSystem "Desktop OpenGL" CACHE STRING "The OpenGL system to be used")
+
     #-------------------------------------------------------------------------------
     #check if we're running on Raspberry Pi
 elseif(EXISTS "${CMAKE_FIND_ROOT_PATH}/opt/vc/include/bcm_host.h")
@@ -132,7 +133,7 @@ set(COMMON_INCLUDE_DIRS
     ${FREETYPE_INCLUDE_DIRS}
     ${FreeImage_INCLUDE_DIRS}
     ${SDL2_INCLUDE_DIR}
- ${SDLMIXER_INCLUDE_DIR}
+    ${SDLMIXER_INCLUDE_DIR}
     ${CURL_INCLUDE_DIR}
     ${VLC_INCLUDE_DIR}
     ${RAPIDJSON_INCLUDE_DIRS}
