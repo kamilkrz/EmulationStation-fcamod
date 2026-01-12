@@ -60,15 +60,13 @@ echo "=========================================="
 echo "Verifying build..."
 echo "=========================================="
 
-if [ -f emulationstation ]; then
-    echo "Binary: emulationstation"
-    echo "Size: $(du -h emulationstation | cut -f1)"
+# Binary is output to source directory (set by EXECUTABLE_OUTPUT_PATH in CMakeLists.txt)
+BINARY_PATH="/src/emulationstation"
+
+if [ -f "$BINARY_PATH" ]; then
+    echo "Binary: $BINARY_PATH"
+    echo "Size: $(du -h "$BINARY_PATH" | cut -f1)"
     echo ""
-    echo "Linked libraries (NEEDED):"
-    aarch64-linux-gnu-readelf -d emulationstation 2>/dev/null | grep NEEDED | head -20 || true
-    echo ""
-    echo "EGL/GLES linkage:"
-    aarch64-linux-gnu-readelf -d emulationstation 2>/dev/null | grep -E "(EGL|GLES|Mali)" || echo "  (none found)"
 else
     echo "ERROR: Binary not found!"
     exit 1
@@ -81,6 +79,7 @@ if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then
     echo ""
     echo "Fixing permissions for host user..."
     chown -R "$HOST_UID:$HOST_GID" /src/${BUILD_DIR}
+    chown -R "$HOST_UID:$HOST_GID" /src/emulationstation
 fi
 
 #===============================================================================
@@ -89,5 +88,5 @@ fi
 echo ""
 echo "=========================================="
 echo "Build complete!"
-echo "Binary: /src/${BUILD_DIR}/emulationstation"
+echo "Binary: /src/emulationstation"
 echo "=========================================="

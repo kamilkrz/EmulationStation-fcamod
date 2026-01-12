@@ -97,6 +97,6 @@ else
     echo ""
     echo "=========================================="
     echo "Build completed successfully!"
-    echo "Binary location: $SCRIPT_DIR/build-arm64-docker/"
+    echo "Binary location: $SCRIPT_DIR/"
     echo "=========================================="
 fi
