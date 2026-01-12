@@ -586,17 +586,34 @@ namespace Renderer
 
 				int brightnessIndex = 0;
 				int brightness = 0;
+				int max_brightness = 255;
 				int fd;
-				char buffer[10];
+				char buffer[16];
+
+				// First read max_brightness to get actual maximum value
+				fd = open("/sys/class/backlight/backlight/max_brightness", O_RDONLY);
+				if (fd > 0)
+				{
+					memset(buffer, 0, 16);
+					ssize_t count = read(fd, buffer, 16);
+					if (count > 0)
+					{
+						max_brightness = atoi(buffer);
+						if (max_brightness <= 0) max_brightness = 255;
+					}
+					close(fd);
+				}
+
+				// Then read current brightness
 				fd = open("/sys/class/backlight/backlight/brightness", O_RDONLY);
 				if (fd > 0)
 				{
-					memset(buffer, 0, 10);
-					ssize_t count = read(fd, buffer, 10);
-					if( count > 0 )
+					memset(buffer, 0, 16);
+					ssize_t count = read(fd, buffer, 16);
+					if (count > 0)
 					{
 						brightness = atoi(buffer);
-						brightness = brightness*100/255;
+						brightness = brightness * 100 / max_brightness;
 					}
 					close(fd);
 				}
@@ -682,7 +699,7 @@ namespace Renderer
 				{
 					brightnessIndex = 19;
 				}
-				else if (brightness = 100)
+				else if (brightness >= 100)
 				{
 					brightnessIndex = 20;
 				}
