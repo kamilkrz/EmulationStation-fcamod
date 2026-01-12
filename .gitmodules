@@ -1,3 +1,6 @@
 [submodule "external/pugixml"]
 	path = external/pugixml
 	url = https://github.com/zeux/pugixml.git
+[submodule "external/libgo2"]
+	path = external/libgo2
+	url = https://github.com/OtherCrashOverride/libgo2.git
