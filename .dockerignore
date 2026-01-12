@@ -1,0 +1,49 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+
+# Binary files
+*.a
+*.o
+*.so
+*.exe
+emulationstation
+
+# Debian packages (keep only in docker/ if needed)
+*.deb
+!docker/*.deb
+!libmali-*.deb
+
+# Git
+.git/
+.gitignore
+.gitmodules
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (not needed for build)
+*.md
+!README.md
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# External submodules will be rebuilt
+external/*/build/
+
+# Keep only essential directories
+# docker/ - needed for armhf.list
+# CMake/ - needed for toolchain and find modules
+# es-app/ - source code
+# es-core/ - source code
+# external/ - dependencies
+# resources/ - resources
