@@ -20,6 +20,7 @@ emulationstation
 
 # build directory
 build
+build-*
 Debug
 Release
 MinSizeRel
