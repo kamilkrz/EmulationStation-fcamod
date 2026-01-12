@@ -67,6 +67,11 @@ set(CMAKE_CXX_FLAGS_INIT "-march=armv8-a")
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-L${CMAKE_SYSROOT}/usr/lib/aarch64-linux-gnu -Wl,--no-as-needed -Wl,--allow-shlib-undefined -Wl,-rpath-link,${CMAKE_SYSROOT}/usr/lib/aarch64-linux-gnu")
 set(CMAKE_SHARED_LINKER_FLAGS_INIT "-L${CMAKE_SYSROOT}/usr/lib/aarch64-linux-gnu -Wl,--allow-shlib-undefined -Wl,-rpath-link,${CMAKE_SYSROOT}/usr/lib/aarch64-linux-gnu")
 
+# Strip binaries in Release builds to reduce size
+# This only affects cross-compiled builds, not native builds
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE_INIT "-s")
+set(CMAKE_SHARED_LINKER_FLAGS_RELEASE_INIT "-s")
+
 # Go2 headers and library paths for cross-compilation
 # These are used by CMakeLists.txt for go2 display support
 if(CMAKE_SYSROOT)
