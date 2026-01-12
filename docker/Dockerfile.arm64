@@ -80,15 +80,6 @@ RUN chmod +x /tmp/download-packages.sh && \
 RUN cp -r /usr/include/rapidjson ${SYSROOT}/usr/include/ && \
     cp -r /usr/include/eigen3 ${SYSROOT}/usr/include/
 
-#===============================================================================
-# LIBGO2 (headers and sources for Odroid Go Advance)
-#===============================================================================
-RUN mkdir -p ${SYSROOT}/usr/include/go2 && \
-    cd /tmp && \
-    git clone --depth 1 https://github.com/OtherCrashOverride/libgo2.git && \
-    cp /tmp/libgo2/src/*.h ${SYSROOT}/usr/include/go2/ && \
-    cp /tmp/libgo2/src/*.c ${SYSROOT}/usr/include/go2/ && \
-    rm -rf /tmp/libgo2
 
 #===============================================================================
 # FIX SYSROOT LIBRARY SYMLINKS

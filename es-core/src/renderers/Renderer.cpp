@@ -10,7 +10,7 @@
 #include <SDL.h>
 #include <stack>
 
-//#include <go2/display.h>
+#include <go2/display.h>
 
 #if WIN32
 #include <Windows.h>
@@ -21,7 +21,7 @@ namespace Renderer
 	static std::stack<Rect> clipStack;
 	static std::stack<Rect> nativeClipStack;
 
-	static SDL_Window*      sdlWindow          = nullptr;
+	//static SDL_Window*      sdlWindow          = nullptr;
 	static int              windowWidth        = 0;
 	static int              windowHeight       = 0;
 	static int              screenWidth        = 0;
@@ -30,13 +30,13 @@ namespace Renderer
 	static int              screenOffsetY      = 0;
 	static int              screenRotate       = 0;
 	static bool             initialCursorState = 1;
-	//static go2_display_t*   display            = nullptr;
+	static go2_display_t*   display            = nullptr;
 
 	static Vector2i			sdlWindowPosition  = Vector2i(SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED);
 
 	static void setIcon()
 	{
-//#if 0
+#if 0
 		size_t                     width   = 0;
 		size_t                     height  = 0;
 		ResourceData               resData = ResourceManager::getInstance()->getFileData(":/window_icon_256.png");
@@ -66,36 +66,32 @@ namespace Renderer
 				SDL_FreeSurface(logoSurface);
 			}
 		}
-//#endif
+#endif
 	} // setIcon
 
 	static bool createWindow()
 	{
 		LOG(LogInfo) << "Creating window...";
 
-		//if(SDL_Init(SDL_INIT_EVENTS) != 0)
-		if(SDL_Init(SDL_INIT_VIDEO) != 0)
+		if(SDL_Init(SDL_INIT_EVENTS) != 0)
 		{
 			LOG(LogError) << "Error initializing SDL!\n	" << SDL_GetError();
 			return false;
 		}
 
-//#if 0
-		static SDL_DisplayMode dispMode;
-
-		if (windowWidth == 0)
-		{
-			initialCursorState = (SDL_ShowCursor(0) != 0);
-			SDL_GetDesktopDisplayMode(0, &dispMode);
-		}
+#if 0
+		initialCursorState = (SDL_ShowCursor(0) != 0);
 
 		if (!Settings::getInstance()->getBool("Windowed"))
 			SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "1");
 
+		SDL_DisplayMode dispMode;
+		SDL_GetDesktopDisplayMode(0, &dispMode);
+
 #if WIN32
 		if (!Settings::getInstance()->getBool("Windowed") && !Settings::getInstance()->getInt("WindowWidth"))
 		{
-			::SetProcessDPIAware();			
+			::SetProcessDPIAware();
 			dispMode.w = ::GetSystemMetrics(SM_CXSCREEN);
 			dispMode.h = ::GetSystemMetrics(SM_CYSCREEN);
 		}
@@ -148,10 +144,10 @@ namespace Renderer
 			windowFlags |= SDL_WINDOW_ALWAYS_ON_TOP;
 
 		windowFlags |= SDL_WINDOW_ALLOW_HIGHDPI;
-	
-		if((sdlWindow = SDL_CreateWindow("EmulationStation", 
+
+		if((sdlWindow = SDL_CreateWindow("EmulationStation",
 			sdlWindowPosition.x(),
-			sdlWindowPosition.y(), 
+			sdlWindowPosition.y(),
 			windowWidth, windowHeight,
 			windowFlags)) == nullptr)
 		{
@@ -164,19 +160,19 @@ namespace Renderer
 		createContext();
 		setIcon();
 		setSwapInterval();
-//#endif
+#endif
 
-		/*display = go2_display_create();
+		display = go2_display_create();
 		windowWidth = go2_display_height_get(display);
 		windowHeight = go2_display_width_get(display);
 		screenWidth = windowWidth;
-		screenHeight = windowHeight;
+		screenHeight = windowHeight - 16;
 		screenOffsetX = 0;
-		screenOffsetY = 0;
+		screenOffsetY = 0 + 16;
 		screenRotate = 0;
 
 		setupWindow();
-		createContext();*/
+		createContext();
 
 		return true;
 
@@ -187,19 +183,19 @@ namespace Renderer
 		if (Settings::getInstance()->getBool("Windowed") && Settings::getInstance()->getInt("WindowWidth") && Settings::getInstance()->getInt("WindowHeight"))
 		{
 			int x; int y;
-			SDL_GetWindowPosition(sdlWindow, &x, &y);
+			//SDL_GetWindowPosition(sdlWindow, &x, &y);
 			sdlWindowPosition = Vector2i(x, y); // Save position to restore it later
 		}
 
 		destroyContext();
-//#if 0
+#if 0
 		SDL_DestroyWindow(sdlWindow);
 		sdlWindow = nullptr;
 
 		SDL_ShowCursor(initialCursorState);
-//#endif
-		/*go2_display_destroy(display);
-		display = nullptr;*/
+#endif
+		go2_display_destroy(display);
+		display = nullptr;
 
 		SDL_Quit();
 
@@ -207,8 +203,8 @@ namespace Renderer
 
 	void activateWindow()
 	{
-		SDL_RaiseWindow(sdlWindow);
-		SDL_SetWindowInputFocus(sdlWindow);
+		//SDL_RaiseWindow(sdlWindow);
+		//SDL_SetWindowInputFocus(sdlWindow);
 	}
 
 	bool init()
@@ -405,7 +401,7 @@ namespace Renderer
 
 	} // drawRect
 
-	SDL_Window* getSDLWindow()     { return sdlWindow; }
+	//SDL_Window* getSDLWindow()     { return sdlWindow; }
 	int         getWindowWidth()   { return windowWidth; }
 	int         getWindowHeight()  { return windowHeight; }
 	int         getScreenWidth()   { return screenWidth; }
@@ -414,9 +410,9 @@ namespace Renderer
 	int         getScreenOffsetY() { return screenOffsetY; }
 	int         getScreenRotate()  { return screenRotate; }
 
-	//go2_display_t* getDisplay()    { return display; }
+	go2_display_t* getDisplay()    { return display; }
 
-	bool        isSmallScreen()    { return screenWidth < 700 || screenHeight < 700; };
+	bool        isSmallScreen()    { return screenWidth < 400 || screenHeight < 400; };
 
 	unsigned int mixColors(unsigned int first, unsigned int second, float percent)
 	{
