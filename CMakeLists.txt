@@ -20,20 +20,21 @@ if(GLES)
     set(GLSystem "Embedded OpenGL" CACHE STRING "The OpenGL system to be used")
 elseif(GL)
     set(GLSystem "Desktop OpenGL" CACHE STRING "The OpenGL system to be used")
-#-------------------------------------------------------------------------------
-#check if we're running on Raspberry Pi
+
+    #-------------------------------------------------------------------------------
+    #check if we're running on Raspberry Pi
 elseif(EXISTS "${CMAKE_FIND_ROOT_PATH}/opt/vc/include/bcm_host.h")
     MESSAGE("bcm_host.h found")
     set(BCMHOST found)
     set(GLSystem "Embedded OpenGL" CACHE STRING "The OpenGL system to be used")
-#-------------------------------------------------------------------------------
-#check if we're running on OSMC Vero4K
+    #-------------------------------------------------------------------------------
+    #check if we're running on OSMC Vero4K
 elseif(EXISTS "${CMAKE_FIND_ROOT_PATH}/opt/vero3/lib/libMali.so")
     MESSAGE("libMali.so found")
     set(VERO4K found)
     set(GLSystem "Embedded OpenGL" CACHE STRING "The OpenGL system to be used")
-#-------------------------------------------------------------------------------
-#check if we're running on olinuxino / odroid / etc
+    #-------------------------------------------------------------------------------
+    #check if we're running on olinuxino / odroid / etc
 elseif(EXISTS "${CMAKE_FIND_ROOT_PATH}/usr/lib/libMali.so" OR
     EXISTS "${CMAKE_FIND_ROOT_PATH}/usr/lib/arm-linux-gnueabihf/libMali.so" OR
     EXISTS "${CMAKE_FIND_ROOT_PATH}/usr/lib/aarch64-linux-gnu/libMali.so" OR
@@ -107,17 +108,17 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     #check for G++ 4.7+
     execute_process(COMMAND ${CMAKE_CXX_COMPILER} -dumpversion OUTPUT_VARIABLE G++_VERSION)
     if (G++_VERSION VERSION_LESS 4.7)
-            message(SEND_ERROR "You need at least G++ 4.7 to compile EmulationStation!")
+        message(SEND_ERROR "You need at least G++ 4.7 to compile EmulationStation!")
     endif()
 
     #set up compiler flags for GCC
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-attributes -O0") #support C++11 for std::, optimize
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O0")
-else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-attributes -O2") #support C++11 for std::, optimize
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O2")  #-s = strip binary
-endif()
+    if (CMAKE_BUILD_TYPE MATCHES Debug)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-attributes -O0") #support C++11 for std::, optimize
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O0")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-attributes -O2") #support C++11 for std::, optimize
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O2")  #-s = strip binary
+    endif()
 endif()
 
 if(${GLSystem} MATCHES "Desktop OpenGL")
@@ -132,7 +133,7 @@ set(COMMON_INCLUDE_DIRS
     ${FREETYPE_INCLUDE_DIRS}
     ${FreeImage_INCLUDE_DIRS}
     ${SDL2_INCLUDE_DIR}
-	${SDLMIXER_INCLUDE_DIR}
+    ${SDLMIXER_INCLUDE_DIR}
     ${CURL_INCLUDE_DIR}
     ${VLC_INCLUDE_DIR}
     ${RAPIDJSON_INCLUDE_DIRS}
@@ -179,7 +180,7 @@ if(DEFINED BCMHOST)
         "${CMAKE_FIND_ROOT_PATH}/opt/vc/include/interface/vmcs_host/linux"
         "${CMAKE_FIND_ROOT_PATH}/opt/vc/include/interface/vcos/pthreads"
     )
-#add include directory for Vero4K
+    #add include directory for Vero4K
 elseif(DEFINED VERO4K)
     LIST(APPEND COMMON_INCLUDE_DIRS
         "${CMAKE_FIND_ROOT_PATH}/opt/vero3/include"
@@ -210,9 +211,9 @@ endif()
 
 set(COMMON_LIBRARIES
     ${FREETYPE_LIBRARIES}
-    ${FreeImage_LIBRARIES}	
+    ${FreeImage_LIBRARIES}
     ${SDL2_LIBRARY}
-	${SDLMIXER_LIBRARY}
+ ${SDLMIXER_LIBRARY}
     ${CURL_LIBRARIES}
     ${VLC_LIBRARIES}
     pugixml
@@ -227,11 +228,11 @@ set(COMMON_LIBRARIES
 
 #add libCEC_LIBRARIES
 if(DEFINED libCEC_FOUND)
-if(DEFINED BCMHOST)
-    LIST(APPEND COMMON_LIBRARIES
+    if(DEFINED BCMHOST)
+        LIST(APPEND COMMON_LIBRARIES
         vchiq_arm
     )
-endif()
+    endif()
     LIST(APPEND COMMON_LIBRARIES
         dl
         ${libCEC_LIBRARIES}
@@ -272,6 +273,16 @@ else()
             ${OPENGLES_LIBRARIES}
         )
     endif()
+endif()
+
+# Add libgo2 for GLES builds (ODROID-GO Advance / rk3326 devices)
+if(GLES)
+    LIST(APPEND COMMON_LIBRARIES
+        go2
+    )
+    LIST(APPEND COMMON_INCLUDE_DIRS
+        ${CMAKE_BINARY_DIR}/external/libgo2/include
+    )
 endif()
 
 #-------------------------------------------------------------------------------
