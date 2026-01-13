@@ -188,6 +188,7 @@ std::map<std::string, std::map<std::string, ThemeData::ElementPropertyType>> The
 		{ "at50", PATH },
 		{ "at25", PATH },
 		{ "empty", PATH },
+		{ "networkIcon", PATH },
 		{ "color", COLOR },
 		{ "visible", BOOLEAN },
 		{ "zIndex", FLOAT } } },
