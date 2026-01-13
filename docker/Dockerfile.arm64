@@ -1,0 +1,206 @@
+# Dockerfile for cross-compiling EmulationStation FCAMOD for arm64 (aarch64)
+#
+# Build:  docker build -f Dockerfile.arm64 -t emulationstation-arm64 .
+# Run:    docker run --rm -v $(pwd):/src emulationstation-arm64
+#
+# This Dockerfile uses manual package extraction to avoid post-install script
+# issues that occur when installing arm64 packages on x86_64 hosts.
+#
+# Dependencies based on README.md:
+#   - Boost (system, filesystem, locale, date-time)
+#   - FreeImage, FreeType
+#   - cURL, SDL2, SDL2_mixer, VLC
+#   - ALSA
+#   - libdrm, libgbm, libevdev, OpenAL (for libgo2)
+#   - libmali (Mali GPU blob), librga (Rockchip RGA)
+
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+#===============================================================================
+# INSTALL HOST BUILD TOOLS
+#===============================================================================
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    pkg-config \
+    crossbuild-essential-arm64 \
+    gcc-aarch64-linux-gnu \
+    g++-aarch64-linux-gnu \
+    dpkg-dev \
+    wget \
+    ca-certificates \
+    # Header-only libraries (architecture-independent)
+    libeigen3-dev \
+    rapidjson-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+#===============================================================================
+# CONFIGURE MULTIARCH FOR ARM64
+#===============================================================================
+RUN dpkg --add-architecture arm64
+
+# Restrict main sources to amd64 only
+RUN sed -i 's/^deb http/deb [arch=amd64] http/g' /etc/apt/sources.list && \
+    sed -i 's/^deb-src http/deb-src [arch=amd64] http/g' /etc/apt/sources.list
+
+# Add arm64 sources from ports.ubuntu.com
+RUN echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal main restricted universe multiverse" > /etc/apt/sources.list.d/arm64.list && \
+    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list && \
+    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-backports main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list && \
+    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
+
+RUN apt-get update
+
+#===============================================================================
+# CREATE ARM64 SYSROOT
+#===============================================================================
+ENV SYSROOT=/usr/aarch64-linux-gnu-sysroot
+RUN mkdir -p ${SYSROOT}
+
+# Download and extract arm64 packages
+COPY docker/download-arm64-packages.sh /tmp/download-packages.sh
+RUN chmod +x /tmp/download-packages.sh && \
+    mkdir -p /tmp/debs && \
+    cd /tmp/debs && \
+    /tmp/download-packages.sh && \
+    echo "Extracting packages to sysroot..." && \
+    for deb in *.deb; do \
+        [ -f "$deb" ] && echo "  Extracting $deb..." && dpkg-deb -x "$deb" ${SYSROOT}; \
+    done && \
+    echo "Extraction complete." && \
+    rm -rf /tmp/debs /tmp/download-packages.sh
+
+#===============================================================================
+# HEADER-ONLY LIBRARIES (copy from host)
+#===============================================================================
+RUN cp -r /usr/include/rapidjson ${SYSROOT}/usr/include/ && \
+    cp -r /usr/include/eigen3 ${SYSROOT}/usr/include/
+
+
+#===============================================================================
+# FIX SYSROOT LIBRARY SYMLINKS
+#===============================================================================
+# Create .so symlinks for libraries that only have versioned files
+RUN cd ${SYSROOT}/usr/lib/aarch64-linux-gnu && \
+    for lib in drm gbm evdev; do \
+        if ls lib${lib}.so.* >/dev/null 2>&1; then \
+            target=$(ls lib${lib}.so.* 2>/dev/null | head -1); \
+            ln -sf $(basename "$target") lib${lib}.so 2>/dev/null || true; \
+        fi; \
+    done && \
+    ls -la libdrm* libgbm* libevdev* 2>/dev/null || echo "Symlinks created"
+
+#===============================================================================
+# LIBRGA (Rockchip RGA for go2 display - built from source)
+#===============================================================================
+# Install meson for cross-compiling librga
+RUN apt-get update && apt-get install -y python3-pip ninja-build && \
+    pip3 install meson && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create meson cross-compilation file for aarch64
+# The key is to use -L with the actual filesystem path (not sysroot-relative)
+# because the cross-linker needs the real path to find libraries
+RUN echo "[binaries]" > /tmp/aarch64-cross.txt && \
+    echo "c = 'aarch64-linux-gnu-gcc'" >> /tmp/aarch64-cross.txt && \
+    echo "cpp = 'aarch64-linux-gnu-g++'" >> /tmp/aarch64-cross.txt && \
+    echo "ar = 'aarch64-linux-gnu-ar'" >> /tmp/aarch64-cross.txt && \
+    echo "strip = 'aarch64-linux-gnu-strip'" >> /tmp/aarch64-cross.txt && \
+    echo "pkg-config = 'pkg-config'" >> /tmp/aarch64-cross.txt && \
+    echo "" >> /tmp/aarch64-cross.txt && \
+    echo "[built-in options]" >> /tmp/aarch64-cross.txt && \
+    echo "c_args = ['-I${SYSROOT}/usr/include']" >> /tmp/aarch64-cross.txt && \
+    echo "cpp_args = ['-I${SYSROOT}/usr/include']" >> /tmp/aarch64-cross.txt && \
+    echo "c_link_args = ['-L${SYSROOT}/usr/lib/aarch64-linux-gnu', '-Wl,-rpath-link,${SYSROOT}/usr/lib/aarch64-linux-gnu']" >> /tmp/aarch64-cross.txt && \
+    echo "cpp_link_args = ['-L${SYSROOT}/usr/lib/aarch64-linux-gnu', '-Wl,-rpath-link,${SYSROOT}/usr/lib/aarch64-linux-gnu']" >> /tmp/aarch64-cross.txt && \
+    echo "" >> /tmp/aarch64-cross.txt && \
+    echo "[properties]" >> /tmp/aarch64-cross.txt && \
+    echo "sys_root = '${SYSROOT}'" >> /tmp/aarch64-cross.txt && \
+    echo "pkg_config_libdir = '${SYSROOT}/usr/lib/aarch64-linux-gnu/pkgconfig:${SYSROOT}/usr/share/pkgconfig'" >> /tmp/aarch64-cross.txt && \
+    echo "" >> /tmp/aarch64-cross.txt && \
+    echo "[host_machine]" >> /tmp/aarch64-cross.txt && \
+    echo "system = 'linux'" >> /tmp/aarch64-cross.txt && \
+    echo "cpu_family = 'aarch64'" >> /tmp/aarch64-cross.txt && \
+    echo "cpu = 'aarch64'" >> /tmp/aarch64-cross.txt && \
+    echo "endian = 'little'" >> /tmp/aarch64-cross.txt
+
+# Copy libraries to cross-linker search path
+# The cross-linker uses /usr/aarch64-linux-gnu/lib as its default search path
+RUN echo "Setting up cross-linker library paths..." && \
+    for lib in drm gbm; do \
+        src=$(find ${SYSROOT}/usr/lib/aarch64-linux-gnu -name "lib${lib}.so.*" -type f 2>/dev/null | head -1) && \
+        if [ -n "$src" ]; then \
+            cp "$src" /usr/aarch64-linux-gnu/lib/ && \
+            ln -sf $(basename "$src") /usr/aarch64-linux-gnu/lib/lib${lib}.so && \
+            echo "Copied lib${lib}: $(basename $src)"; \
+        fi; \
+    done && \
+    ls -la /usr/aarch64-linux-gnu/lib/lib{drm,gbm}* 2>/dev/null || echo "Libraries copied"
+
+# Build librga from christianhaitian's fork
+RUN cd /tmp && \
+    git clone https://github.com/christianhaitian/linux-rga.git && \
+    cd linux-rga && \
+    git checkout 1fc02d56d97041c86f01bc1284b7971c6098c5fb && \
+    export PKG_CONFIG_SYSROOT_DIR="${SYSROOT}" && \
+    export PKG_CONFIG_LIBDIR="${SYSROOT}/usr/lib/aarch64-linux-gnu/pkgconfig:${SYSROOT}/usr/share/pkgconfig" && \
+    meson setup build --cross-file /tmp/aarch64-cross.txt && \
+    cd build && \
+    meson compile && \
+    cp -r librga.so* ${SYSROOT}/usr/lib/aarch64-linux-gnu/ && \
+    cd .. && \
+    mkdir -p ${SYSROOT}/usr/local/include/rga && \
+    cp -f drmrga.h rga.h RgaApi.h RockchipRgaMacro.h ${SYSROOT}/usr/local/include/rga/ && \
+    rm -rf /tmp/linux-rga /tmp/aarch64-cross.txt
+
+#===============================================================================
+# LIBMALI (Mali GPU blob - provides EGL/GLES)
+#===============================================================================
+COPY libmali-rk-bifrost-g31-rxp0-wayland-gbm_1.7-2+deb10_arm64.deb /tmp/
+COPY libmali-rk-dev_1.7-1+deb10_arm64.deb /tmp/
+RUN dpkg-deb -x /tmp/libmali-rk-bifrost-g31-rxp0-wayland-gbm_1.7-2+deb10_arm64.deb ${SYSROOT} && \
+    dpkg-deb -x /tmp/libmali-rk-dev_1.7-1+deb10_arm64.deb ${SYSROOT} && \
+    rm -f /tmp/libmali-*.deb
+
+# Create EGL/GLES symlinks to libMali.so (Mali blob provides these APIs)
+RUN MALI_LIB_DIR="${SYSROOT}/usr/lib/aarch64-linux-gnu" && \
+    MALI_SO=$(find ${MALI_LIB_DIR} -maxdepth 1 \( -name 'libMali.so*' -o -name 'libmali.so*' \) 2>/dev/null | head -1) && \
+    if [ -n "$MALI_SO" ]; then \
+        MALI_NAME=$(basename "$MALI_SO") && \
+        echo "Found Mali library: ${MALI_NAME}" && \
+        # EGL symlinks
+        [ ! -e "${MALI_LIB_DIR}/libEGL.so" ] && ln -sf "${MALI_NAME}" "${MALI_LIB_DIR}/libEGL.so"; \
+        [ ! -e "${MALI_LIB_DIR}/libEGL.so.1" ] && ln -sf "${MALI_NAME}" "${MALI_LIB_DIR}/libEGL.so.1"; \
+        # GLESv1 symlinks
+        [ ! -e "${MALI_LIB_DIR}/libGLESv1_CM.so" ] && ln -sf "${MALI_NAME}" "${MALI_LIB_DIR}/libGLESv1_CM.so"; \
+        [ ! -e "${MALI_LIB_DIR}/libGLESv1_CM.so.1" ] && ln -sf "${MALI_NAME}" "${MALI_LIB_DIR}/libGLESv1_CM.so.1"; \
+        # GLESv2 symlinks
+        [ ! -e "${MALI_LIB_DIR}/libGLESv2.so" ] && ln -sf "${MALI_NAME}" "${MALI_LIB_DIR}/libGLESv2.so"; \
+        [ ! -e "${MALI_LIB_DIR}/libGLESv2.so.2" ] && ln -sf "${MALI_NAME}" "${MALI_LIB_DIR}/libGLESv2.so.2"; \
+        echo "Mali symlinks created."; \
+    else \
+        echo "Warning: Mali library not found"; \
+    fi
+
+#===============================================================================
+# ENVIRONMENT FOR CROSS-COMPILATION
+#===============================================================================
+WORKDIR /src
+
+ENV CC=aarch64-linux-gnu-gcc
+ENV CXX=aarch64-linux-gnu-g++
+ENV PKG_CONFIG_PATH=${SYSROOT}/usr/lib/aarch64-linux-gnu/pkgconfig:${SYSROOT}/usr/share/pkgconfig:/usr/share/pkgconfig
+ENV PKG_CONFIG_LIBDIR=${SYSROOT}/usr/lib/aarch64-linux-gnu/pkgconfig:${SYSROOT}/usr/share/pkgconfig
+ENV PKG_CONFIG_SYSROOT_DIR=${SYSROOT}
+
+#===============================================================================
+# BUILD SCRIPT
+#===============================================================================
+COPY docker/build-arm64.sh /usr/local/bin/build.sh
+RUN chmod +x /usr/local/bin/build.sh
+
+CMD ["/usr/local/bin/build.sh"]

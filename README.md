@@ -69,6 +69,97 @@ You can request a Developer ID and Password from screenscraper.fr by creating an
 You can request a apikey from TheGamesDB by creating an account then go to the forum located at: https://forums.thegamesdb.net/viewforum.php?f=10
 
 
+Docker Cross-Compilation Build (arm64)
+======================================
+
+If you want to build EmulationStation for arm64/aarch64 devices (like Odroid Go Advance, RG351, or other rk3326 devices) from an x86_64 host machine, you can use Docker for cross-compilation.
+
+### Requirements
+
+- **Docker** installed and running on your x86_64 host machine
+- Approximately **2-3 GB** of disk space for the Docker image
+- Internet connection (to download arm64 packages during image build)
+
+### Build Process
+
+A helper script `build-docker-arm64.sh` is provided in the project root to simplify the build process.
+
+1. **Clone the repository** (if you haven't already):
+   ```bash
+   git clone --recursive https://github.com/christianhaitian/EmulationStation-fcamod.git -b 351v
+   cd EmulationStation-fcamod
+   ```
+
+2. **Run the build script**:
+   ```bash
+   ./build-docker-arm64.sh
+   ```
+   
+   The script will automatically:
+   - Build the Docker image (if it doesn't exist)
+   - Run the cross-compilation build
+   - Set correct file ownership for the output
+
+### Build Script Options
+
+The `build-docker-arm64.sh` script supports the following options:
+
+| Option | Description |
+|--------|-------------|
+| `--clean` | Remove existing Docker image and rebuild from scratch |
+| `--shell` | Open an interactive shell in the container (for debugging) |
+| `--help` | Show help message |
+
+### Scraper Credentials (Optional)
+
+To enable scraping from ScreenScraper.fr and TheGamesDB, set environment variables before running the build:
+
+```bash
+export SCREENSCRAPER_DEV_LOGIN="devid=YourID&devpassword=YourPass"
+export GAMESDB_APIKEY="YourAPIKey"
+export SCREENSCRAPER_SOFTNAME="YourBuildName"
+./build-docker-arm64.sh
+```
+
+### Build Output
+
+After a successful build, you will find:
+
+- **Binary**: `emulationstation` in the project root directory
+- **Build artifacts**: `build-arm64-docker/` directory containing object files and CMake cache
+
+The build script automatically verifies the binary and displays:
+- Binary size
+
+### What the Docker Build Includes
+
+The Docker image sets up a complete cross-compilation environment with:
+
+- **Cross-compiler**: `aarch64-linux-gnu-gcc` / `g++`
+- **ARM64 sysroot** with all required libraries:
+  - Boost (system, filesystem, locale, date-time)
+  - FreeImage, FreeType
+  - SDL2, SDL2_mixer
+  - cURL, VLC, ALSA
+  - libdrm, libgbm, libevdev (for display/input)
+  - OpenAL (for audio)
+- **librga**: Built from source (Rockchip RGA library)
+- **libgo2**: Headers for Odroid Go Advance support
+- **libmali**: Mali GPU blob providing EGL/GLES
+
+### Manual Docker Commands
+
+If you prefer not to use the helper script, you can run Docker commands directly:
+
+```bash
+# Build the Docker image
+docker build -f docker/Dockerfile.arm64 -t emulationstation-arm64 .
+
+# Run the build
+docker run --rm -v $(pwd):/src -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) emulationstation-arm64
+```
+
+
 current brightness script for es-app/src/guis/GuiMenu.cpp line 78
 =================
 current_brightness
