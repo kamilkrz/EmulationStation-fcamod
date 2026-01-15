@@ -6,6 +6,9 @@
 #include <windows.h>
 #else
 #include <unistd.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #endif
 #include <fcntl.h>
 
@@ -372,4 +375,97 @@ std::string getShOutput(const std::string& mStr)
 
     pclose(pipe);
     return result;
+}
+
+std::string queryIPAddress()
+{
+	std::string result;
+
+#if WIN32
+	// Init WinSock
+	WSADATA wsa_Data;
+	int wsa_ReturnCode = WSAStartup(0x101, &wsa_Data);
+	if (wsa_ReturnCode != 0)
+		return "";
+
+	char* szLocalIP = nullptr;
+
+	// Get the local hostname
+	char szHostName[255];
+	if (gethostname(szHostName, 255) == 0)
+	{
+		struct hostent *host_entry;
+		host_entry = gethostbyname(szHostName);
+		if (host_entry != nullptr)
+			szLocalIP = inet_ntoa(*(struct in_addr *)*host_entry->h_addr_list);
+	}
+
+	WSACleanup();
+
+	if (szLocalIP == nullptr)
+		return "";
+
+	return std::string(szLocalIP);
+#else
+	struct ifaddrs *ifAddrStruct = NULL;
+	struct ifaddrs *ifa = NULL;
+	void *tmpAddrPtr = NULL;
+
+	getifaddrs(&ifAddrStruct);
+
+	for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) 
+	{
+		if (!ifa->ifa_addr)
+			continue;
+		
+		// check it is IP4 is a valid IP4 Address
+		if (ifa->ifa_addr->sa_family == AF_INET)
+		{ 			
+			tmpAddrPtr = &((struct sockaddr_in *) ifa->ifa_addr)->sin_addr;
+			char addressBuffer[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+			
+			std::string ifName = ifa->ifa_name;
+			if (ifName.find("eth") != std::string::npos || ifName.find("wlan") != std::string::npos || 
+			    ifName.find("mlan") != std::string::npos || ifName.find("en") != std::string::npos || 
+			    ifName.find("wl") != std::string::npos || ifName.find("p2p") != std::string::npos)
+			{
+				result = std::string(addressBuffer);
+				break;
+			}
+		}
+	}
+	
+	// Seeking for ipv6 if no IPV4
+	if (result.empty()) 
+	{
+		for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) 
+		{
+			if (!ifa->ifa_addr)
+				continue;
+			
+			// check it is IP6 is a valid IP6 Address
+			if (ifa->ifa_addr->sa_family == AF_INET6) 
+			{ 				
+				tmpAddrPtr = &((struct sockaddr_in6 *) ifa->ifa_addr)->sin6_addr;
+				char addressBuffer[INET6_ADDRSTRLEN];
+				inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
+
+				std::string ifName = ifa->ifa_name;
+				if (ifName.find("eth") != std::string::npos || ifName.find("wlan") != std::string::npos || 
+				    ifName.find("mlan") != std::string::npos || ifName.find("en") != std::string::npos || 
+				    ifName.find("wl") != std::string::npos || ifName.find("p2p") != std::string::npos)
+				{
+					result = std::string(addressBuffer);
+					break;
+				}
+			}
+		}
+	}
+
+	if (ifAddrStruct != NULL)
+		freeifaddrs(ifAddrStruct);
+#endif
+
+	return result;
 }
