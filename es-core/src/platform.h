@@ -56,6 +56,8 @@ int queryBatteryLevel();
 bool queryBatteryCharging();
 float queryBatteryVoltage();
 
+std::string queryIPAddress();
+
 #if defined(WIN32)
 #include <Windows.h>
 #include <intrin.h>

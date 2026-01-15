@@ -45,10 +45,11 @@ void ControllerActivityComponent::init()
 	float margin = (int)(Renderer::getScreenHeight() / 280.0f);
 	mPosition = Vector3f(margin, Renderer::getScreenHeight() - mSize.y() - margin, 0.0f);
 
-	/*for (int i = 0; i < MAX_PLAYERS; i++)
+	for (int i = 0; i < MAX_PLAYERS; i++)
 		mPads[i].reset();
 
-	updateNetworkInfo();*/
+	mNetworkConnected = false;
+	updateNetworkInfo();
 	updateBatteryInfo();
 }
 
@@ -123,7 +124,7 @@ void ControllerActivityComponent::update(int deltaTime)
 		mNetworkCheckTime += deltaTime;
 		if (mNetworkCheckTime >= UPDATE_NETWORK_DELAY)
 		{
-			//updateNetworkInfo();
+			updateNetworkInfo();
 			mNetworkCheckTime = 0;
 		}
 	}
@@ -387,10 +388,10 @@ void ControllerActivityComponent::applyTheme(const std::shared_ptr<ThemeData>& t
 	onSizeChanged();
 }
 
-/*void ControllerActivityComponent::updateNetworkInfo()
+void ControllerActivityComponent::updateNetworkInfo()
 {
 	mNetworkConnected = Settings::getInstance()->getBool("ShowNetworkIndicator") && !queryIPAddress().empty();
-}*/
+}
 
 void ControllerActivityComponent::updateBatteryInfo()
 {

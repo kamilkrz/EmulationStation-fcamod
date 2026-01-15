@@ -104,6 +104,7 @@ void Settings::setDefaults()
 	mBoolMap["MoveCarousel"] = true;
 	mBoolMap["SaveGamelistsOnExit"] = true;
 	mBoolMap["ShowBatteryIndicator"] = true;
+	mBoolMap["ShowNetworkIndicator"] = true;
 	mStringMap["ShowBattery"] = "text";
 	mStringMap["VerbalBatteryVoice"] = "male1";
 	mStringMap["VerbalBatteryWarning"] = "on";
