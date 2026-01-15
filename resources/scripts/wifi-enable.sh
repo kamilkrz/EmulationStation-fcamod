@@ -130,9 +130,6 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
 done
 
-# Start the wifi icon updater service if it exists
-log "Starting wifi-icon-updater.service..."
-systemctl start wifi-icon-updater.service 2>&1 | tee -a "$LOGFILE"
 
 log "WiFi hardware enabled successfully"
 log "========================================"

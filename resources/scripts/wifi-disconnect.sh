@@ -3,16 +3,7 @@
 # This script needs to be run with sudo privileges
 # Debug version with extensive logging
 
-# Ensure root privileges BEFORE any logging to avoid permission issues
-if [ "$(id -u)" -ne 0 ]; then
-    exec sudo -- "$0" "$@"
-fi
-
 LOGFILE="/home/ark/wifi-disconnect.log"
-
-# Ensure log file is writable by ark user for future non-root access
-touch "$LOGFILE" 2>/dev/null
-chown ark:ark "$LOGFILE" 2>/dev/null
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOGFILE"
@@ -25,9 +16,16 @@ log "Calling user: ${SUDO_USER:-$(whoami)}"
 log "Script path: $0"
 log "Arguments: $*"
 log "PWD: $(pwd)"
+
+# Ensure root privileges
+if [ "$(id -u)" -ne 0 ]; then
+    log "Not running as root, escalating with sudo..."
+    exec sudo -- "$0" "$@"
+fi
+
 log "Running as root, proceeding with disconnect"
 
-# --- Wi-Fi module detection ---
+# Wi-Fi module detection
 log "Starting WiFi module detection..."
 
 # Method 1: Find the driver currently bound to any 'wlan' interface
@@ -45,7 +43,15 @@ else
     log "Identified WiFi modules: $DETECTED_MODULES"
 fi
 
-# Block wifi via rfkill
+# Releasing the IP address before disconnecting
+log "Releasing IP address..."
+dhclient -r $IFACE 2>&1 | tee -a "$LOGFILE" 
+
+# Disconnect the Wi-Fi
+log "Disconnecting Wi-Fi..."
+nmcli dev disconnect iface $IFACE 2>&1 | tee -a "$LOGFILE"
+
+# Blocking Wi-Fi via rfkill
 log "Blocking wifi via rfkill..."
 rfkill list wifi >> "$LOGFILE" 2>&1
 log "rfkill list before block (above)"
