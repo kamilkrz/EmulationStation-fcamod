@@ -36,6 +36,7 @@ private:
 
 	static void reloadAllGames(Window* window, bool deleteCurrentGui = false);
 
+	void openNetworkSettings();
 	void openUpdateSettings();
 	void openEmulatorSettings();
 	void openSystemEmulatorSettings(SystemData* system);

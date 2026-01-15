@@ -1,5 +1,6 @@
 #include "guis/GuiMenu.h"
 #include "guis/GuiTools.h"
+#include "guis/GuiWifi.h"
 #include "components/OptionListComponent.h"
 #include "components/SliderComponent.h"
 #include "components/SwitchComponent.h"
@@ -18,6 +19,7 @@
 #include "VolumeControl.h"
 #include <SDL_events.h>
 #include <algorithm>
+#include <thread>
 #include "AudioManager.h"
 #include "resources/TextureData.h"
 #include "animations/LambdaAnimation.h"
@@ -26,6 +28,7 @@
 #include "platform.h"
 #include "renderers/Renderer.h" // setSwapInterval()
 #include "guis/GuiTextEditPopupKeyboard.h"
+#include "guis/GuiTextEditPopup.h"
 #include "scrapers/ThreadedScraper.h"
 #include "ApiSystem.h"
 #include "views/gamelist/IGameListView.h"
@@ -50,6 +53,7 @@ GuiMenu::GuiMenu(Window* window, bool animate) : GuiComponent(window), mMenu(win
 	}
 
 	addEntry(_("SOUND SETTINGS"), true, [this] { openSoundSettings(); }, "iconSound");
+	addEntry(_("NETWORK SETTINGS"), true, [this] { openNetworkSettings(); }, "iconNetwork");
 
 	if (isFullUI)
 	{
@@ -1602,6 +1606,115 @@ void GuiMenu::openEmulatorSettings()
 	}
 
 	window->pushGui(configuration);
+}
+
+void GuiMenu::openNetworkSettings()
+{
+	Window* window = mWindow;
+	auto s = new GuiSettings(mWindow, _("NETWORK SETTINGS"));
+
+	auto theme = ThemeData::getMenuTheme();
+	std::shared_ptr<Font> font = theme->Text.font;
+	unsigned int color = theme->Text.color;
+
+	// Get WiFi status for later use
+	std::string wifiStatus = ApiSystem::getInstance()->getWifiStatus();
+
+	// WiFi Toggle Switch
+	bool wifiEnabled = (wifiStatus != "OFF" && wifiStatus != "N/A");
+	auto wifiSwitch = std::make_shared<SwitchComponent>(mWindow);
+	wifiSwitch->setState(wifiEnabled);
+	s->addWithLabel(_("WIFI"), wifiSwitch);
+	wifiSwitch->setOnChangedCallback([this, window, wifiSwitch, s]
+	{
+		bool newState = wifiSwitch->getState();
+		if (newState)
+		{
+			// Enable WiFi
+			window->displayNotificationMessage(_("ENABLING WIFI..."));
+			
+			// Run in separate thread to avoid blocking UI
+			std::thread([this, window]()
+			{
+				bool success = ApiSystem::getInstance()->enableWifi();
+				if (success)
+				{
+					window->displayNotificationMessage(_("WIFI ENABLED"));
+					// Reopen menu on main thread to refresh
+					window->postToUiThread([this](Window* w) {
+						delete w->peekGui();
+						openNetworkSettings();
+					});
+				}
+				else
+					window->displayNotificationMessage(_("FAILED TO ENABLE WIFI"));
+			}).detach();
+		}
+		else
+		{
+			// Disable WiFi
+			window->displayNotificationMessage(_("DISABLING WIFI..."));
+			
+			// Run in separate thread to avoid blocking UI
+			std::thread([this, window]()
+			{
+				bool success = ApiSystem::getInstance()->disableWifi();
+				if (success)
+				{
+					window->displayNotificationMessage(_("WIFI DISABLED") + " - " + _("OTG PORT READY"));
+					// Reopen menu on main thread to refresh
+					window->postToUiThread([this](Window* w) {
+						delete w->peekGui();
+						openNetworkSettings();
+					});
+				}
+				else
+					window->displayNotificationMessage(_("FAILED TO DISABLE WIFI"));
+			}).detach();
+		}
+	});
+
+	// Connect to WiFi Network (only show if WiFi is enabled)
+	if (wifiEnabled)
+	{
+		s->addEntry(_("CONNECT TO WIFI"), true, [this, window]
+		{
+			window->pushGui(new GuiWifi(window, _("SELECT WIFI NETWORK"), "", [this, window](const std::string& ssid)
+			{
+				// Refresh network settings menu after successful connection
+				window->postToUiThread([this](Window* w) {
+					delete w->peekGui();
+					openNetworkSettings();
+				});
+			}));
+		});
+	}
+
+	// Connected Network (read-only, at bottom)
+	std::string connectedSSID = ApiSystem::getInstance()->getConnectedSSID();
+	if (connectedSSID.empty())
+		connectedSSID = _("NOT CONNECTED");
+	{
+		ComponentListRow row;
+		row.selectable = false;
+		row.addElement(std::make_shared<TextComponent>(mWindow, Utils::String::toUpper(_("CONNECTED NETWORK")), font, color), true);
+		row.addElement(std::make_shared<TextComponent>(mWindow, connectedSSID, font, color), false);
+		s->addRow(row);
+	}
+
+	// IP Address (read-only, at bottom)
+	std::string ipAddr = ApiSystem::getInstance()->getIpAddress();
+	if (ipAddr.empty())
+		ipAddr = _("NOT CONNECTED");
+	{
+		ComponentListRow row;
+		row.selectable = false;
+		row.addElement(std::make_shared<TextComponent>(mWindow, Utils::String::toUpper(_("IP ADDRESS")), font, color), true);
+		row.addElement(std::make_shared<TextComponent>(mWindow, ipAddr, font, color), false);
+		s->addRow(row);
+	}
+
+	mWindow->pushGui(s);
 }
 
 void GuiMenu::openUpdateSettings()

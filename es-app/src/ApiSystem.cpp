@@ -3,23 +3,29 @@
 #include "HttpReq.h"
 #include "utils/FileSystemUtil.h"
 #include "utils/StringUtil.h"
+#include "platform.h"
+#include "SystemConf.h"
 #include <thread>
-#include <codecvt> 
-#include <locale> 
+#include <codecvt>
+#include <locale>
 #include "Log.h"
 #include "Window.h"
 #include "components/AsyncNotificationComponent.h"
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
-#include <unistd.h> 
+#include <unistd.h>
+#include <cstdlib>
+#include <array>
+#include <memory>
 
 ApiSystem* ApiSystem::instance = nullptr;
 
-ApiSystem *ApiSystem::getInstance() 
+ApiSystem *ApiSystem::getInstance()
 {
 	if (ApiSystem::instance == nullptr)
 #if WIN32
@@ -124,8 +130,8 @@ std::string ApiSystem::checkUpdateVersion()
 		localVersion = Utils::FileSystem::readAllText(localVersionFile);
 		localVersion = Utils::String::replace(Utils::String::replace(localVersion, "\r", ""), "\n", "");
 	}
-	
-	HttpReq httpreq("https://github.com/fabricecaruso/EmulationStation/releases/download/continuous-master/version.info");	
+
+	HttpReq httpreq("https://github.com/fabricecaruso/EmulationStation/releases/download/continuous-master/version.info");
 	if (httpreq.wait())
 	{
 		std::string serverVersion = httpreq.getContent();
@@ -275,7 +281,7 @@ std::pair<std::string, int> ApiSystem::updateSystem(const std::function<void(con
 		auto files = Utils::FileSystem::getDirContent(path, true, true);
 		for (auto file : files)
 		{
-			
+
 			std::string relative = Utils::FileSystem::createRelativePath(file, path, false);
 			if (Utils::String::startsWith(relative, "./"))
 				relative = relative.substr(2);
@@ -345,7 +351,7 @@ std::vector<ThemeDownloadInfo> ApiSystem::getThemesList()
 					themeExists = Utils::FileSystem::isDirectory(path + "/" + themeName) ||
 						Utils::FileSystem::isDirectory(path + "/" + themeFolder) ||
 						Utils::FileSystem::isDirectory(path + "/" + themeFolder + "-master");
-					
+
 					if (themeExists)
 						break;
 				}
@@ -420,7 +426,7 @@ std::pair<std::string, int> ApiSystem::installTheme(std::string themeName, const
 {
 #if WIN32
 	for (auto theme : getThemesList())
-	{		
+	{
 		if (theme.name != themeName)
 			continue;
 
@@ -449,11 +455,11 @@ std::pair<std::string, int> ApiSystem::installTheme(std::string themeName, const
 				Utils::FileSystem::removeFile(zipFile);
 
 				return std::pair<std::string, int>(std::string("OK"), 0);
-			}			
+			}
 
 			return std::pair<std::string, int>(std::string("Invalid extraction folder"), 1);
 		}
-				
+
 		return std::pair<std::string, int>(std::string("An error occurred while downloading"), 1);
 	}
 #endif
@@ -480,7 +486,7 @@ bool ApiSystem::getBrighness(int& value)
 	value = 0;
 
 	int fd;
-	int max = 100;	
+	int max = 100;
 	char buffer[BACKLIGHT_BUFFER_SIZE + 1];
 	ssize_t count;
 
@@ -496,7 +502,7 @@ bool ApiSystem::getBrighness(int& value)
 
 	close(fd);
 
-	if (max == 0) 
+	if (max == 0)
 		return 0;
 
 	fd = open(DBACKLIGHT_BRIGHTNESS_NAME, O_RDONLY);
@@ -518,7 +524,7 @@ bool ApiSystem::getBrighness(int& value)
 
 void ApiSystem::setBrighness(int value)
 {
-#if !WIN32	
+#if !WIN32
 	if (value < 1)
 		value = 1;
 
@@ -542,21 +548,21 @@ void ApiSystem::setBrighness(int value)
 
 	close(fd);
 
-	if (max == 0) 
+	if (max == 0)
 		return;
 
 	fd = open(DBACKLIGHT_BRIGHTNESS_NAME, O_WRONLY);
 	if (fd < 0)
 		return;
-	
+
 	float percent = (value / 100.0f * (float)max) + 0.5f;
 	sprintf(buffer, "%d\n", (uint32_t)percent);
 
 	count = write(fd, buffer, strlen(buffer));
-	
+
 	if (count < 0)
 		LOG(LogError) << "ApiSystem::setBrighness failed";
-	
+
 	close(fd);
 #endif
 }
@@ -568,3 +574,310 @@ BatteryInformation ApiSystem::getBatteryInformation(bool summary)
 	return queryBatteryInformation(summary); // platform.h
 }
 
+std::string ApiSystem::getIpAddress()
+{
+	return queryIPAddress(); // from platform.h
+}
+
+bool ApiSystem::ping()
+{
+#if WIN32
+	return false;
+#else
+	int ret = system("ping -c 1 -W 3 8.8.8.8 > /dev/null 2>&1");
+	return (ret == 0);
+#endif
+}
+
+static const char* WIFI_SCRIPT_STATUS = "/bin/emulationstation/resources/scripts/wifi-status.sh";
+static const char* WIFI_SCRIPT_SCAN = "/bin/emulationstation/resources/scripts/wifi-scan.sh";
+static const char* WIFI_SCRIPT_ENABLE = "/bin/emulationstation/resources/scripts/wifi-enable.sh";
+static const char* WIFI_SCRIPT_CONNECT = "/bin/emulationstation/resources/scripts/wifi-connect.sh";
+static const char* WIFI_SCRIPT_DISCONNECT = "/bin/emulationstation/resources/scripts/wifi-disconnect.sh";
+static const char* WIFI_SCRIPT_SAVED_LIST = "/bin/emulationstation/resources/scripts/wifi-saved-list.sh";
+static const char* WIFI_SCRIPT_CONNECT_SAVED = "/bin/emulationstation/resources/scripts/wifi-connect-saved.sh";
+
+// Helper to get WiFi status for R36S
+std::string ApiSystem::getWifiStatus()
+{
+#if WIN32
+	return "N/A";
+#else
+	// Use helper script (doesn't need sudo for status check)
+	FILE* pipe = popen(WIFI_SCRIPT_STATUS, "r");
+	if (pipe)
+	{
+		char buffer[64];
+		if (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+		{
+			std::string status = buffer;
+			status.erase(status.find_last_not_of(" \n\r\t") + 1);
+			pclose(pipe);
+			return status;
+		}
+		pclose(pipe);
+	}
+
+	return "OFF";
+#endif
+}
+
+std::string ApiSystem::getConnectedSSID()
+{
+#if WIN32
+	return "";
+#else
+	FILE* pipe = popen("nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes:' | cut -d: -f2", "r");
+	if (pipe)
+	{
+		char buffer[128];
+		if (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+		{
+			std::string ssid = buffer;
+			ssid.erase(ssid.find_last_not_of(" \n\r\t") + 1);
+			pclose(pipe);
+			return ssid;
+		}
+		pclose(pipe);
+	}
+	return "";
+#endif
+}
+
+std::vector<std::string> ApiSystem::getWifiNetworks(bool scan)
+{
+	LOG(LogDebug) << "ApiSystem::getWifiNetworks(" << (scan ? "scan" : "cached") << ")";
+
+	std::vector<std::string> result;
+
+#if WIN32
+	return result;
+#else
+	// Use helper script for scanning (script handles sudo internally)
+	std::string cmd = WIFI_SCRIPT_SCAN;
+	FILE* pipe = popen(cmd.c_str(), "r");
+	if (pipe)
+	{
+		char buffer[256];
+		while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+		{
+			std::string ssid = buffer;
+			ssid.erase(ssid.find_last_not_of(" \n\r\t") + 1);
+			if (!ssid.empty())
+			{
+				result.push_back(ssid);
+			}
+		}
+		pclose(pipe);
+	}
+
+	LOG(LogDebug) << "ApiSystem::getWifiNetworks found " << result.size() << " networks";
+#endif
+
+	return result;
+}
+
+bool ApiSystem::connectWifi(const std::string& ssid, const std::string& key)
+{
+	LOG(LogInfo) << "ApiSystem::connectWifi(" << ssid << ")";
+
+#if WIN32
+	return false;
+#else
+	// Escape single quotes in ssid and key for shell
+	std::string escapedSsid = ssid;
+	std::string escapedKey = key;
+
+	// Replace ' with '\'' for shell escaping
+	size_t pos = 0;
+	while ((pos = escapedSsid.find("'", pos)) != std::string::npos) {
+		escapedSsid.replace(pos, 1, "'\\''");
+		pos += 4;
+	}
+	pos = 0;
+	while ((pos = escapedKey.find("'", pos)) != std::string::npos) {
+		escapedKey.replace(pos, 1, "'\\''");
+		pos += 4;
+	}
+
+	std::string cmd = std::string(WIFI_SCRIPT_CONNECT) + " '" + escapedSsid + "'";
+	if (!key.empty()) {
+		cmd += " '" + escapedKey + "'";
+	}
+
+	LOG(LogInfo) << "ApiSystem::connectWifi() - executing: " << cmd;
+
+	int ret = system(cmd.c_str());
+
+	LOG(LogInfo) << "ApiSystem::connectWifi() - script returned: " << ret;
+
+	if (ret == -1) {
+		LOG(LogError) << "ApiSystem::connectWifi() - system() failed to execute";
+		return false;
+	}
+
+	if (WIFEXITED(ret)) {
+		int exitStatus = WEXITSTATUS(ret);
+		LOG(LogInfo) << "ApiSystem::connectWifi() - script exit status: " << exitStatus;
+		return (exitStatus == 0);
+	}
+
+	LOG(LogWarning) << "ApiSystem::connectWifi() - script did not exit normally";
+	return false;
+#endif
+}
+
+bool ApiSystem::enableWifi()
+{
+	LOG(LogInfo) << "ApiSystem::enableWifi()";
+
+#if WIN32
+	return false;
+#else
+	// Call enable script to enable WiFi hardware
+	std::string cmd = WIFI_SCRIPT_ENABLE;
+	LOG(LogInfo) << "ApiSystem::enableWifi() - executing: " << cmd;
+
+	int ret = system(cmd.c_str());
+
+	LOG(LogInfo) << "ApiSystem::enableWifi() - script returned: " << ret;
+
+	if (ret == -1) {
+		LOG(LogError) << "ApiSystem::enableWifi() - system() failed to execute";
+		return false;
+	}
+
+	if (WIFEXITED(ret)) {
+		int exitStatus = WEXITSTATUS(ret);
+		LOG(LogInfo) << "ApiSystem::enableWifi() - script exit status: " << exitStatus;
+		return (exitStatus == 0);
+	}
+
+	LOG(LogWarning) << "ApiSystem::enableWifi() - script did not exit normally";
+	return false;
+#endif
+}
+
+bool ApiSystem::disableWifi()
+{
+	LOG(LogInfo) << "ApiSystem::disableWifi()";
+
+#if WIN32
+	return false;
+#else
+	// Use helper script (script handles sudo internally)
+	std::string cmd = WIFI_SCRIPT_DISCONNECT;
+	LOG(LogInfo) << "ApiSystem::disableWifi() - executing: " << cmd;
+
+	int ret = system(cmd.c_str());
+
+	LOG(LogInfo) << "ApiSystem::disableWifi() - script returned: " << ret;
+
+	if (ret == -1) {
+		LOG(LogError) << "ApiSystem::disableWifi() - system() failed to execute";
+		return false;
+	}
+
+	if (WIFEXITED(ret)) {
+		int exitStatus = WEXITSTATUS(ret);
+		LOG(LogInfo) << "ApiSystem::disableWifi() - script exit status: " << exitStatus;
+		return (exitStatus == 0);
+	}
+
+	LOG(LogWarning) << "ApiSystem::disableWifi() - script did not exit normally";
+	return false;
+#endif
+}
+
+std::vector<std::string> ApiSystem::getSavedWifiConnections()
+{
+	LOG(LogDebug) << "ApiSystem::getSavedWifiConnections()";
+
+	std::vector<std::string> result;
+
+#if WIN32
+	return result;
+#else
+	// Use helper script to list saved WiFi connections
+	std::string cmd = WIFI_SCRIPT_SAVED_LIST;
+	FILE* pipe = popen(cmd.c_str(), "r");
+	if (pipe)
+	{
+		char buffer[256];
+		while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+		{
+			std::string connName = buffer;
+			connName.erase(connName.find_last_not_of(" \n\r\t") + 1);
+			if (!connName.empty())
+			{
+				result.push_back(connName);
+			}
+		}
+		pclose(pipe);
+	}
+
+	LOG(LogDebug) << "ApiSystem::getSavedWifiConnections found " << result.size() << " saved connections";
+#endif
+
+	return result;
+}
+
+bool ApiSystem::isWifiConnectionSaved(const std::string& ssid)
+{
+	LOG(LogDebug) << "ApiSystem::isWifiConnectionSaved(" << ssid << ")";
+
+#if WIN32
+	return false;
+#else
+	std::vector<std::string> savedConnections = getSavedWifiConnections();
+	for (const auto& conn : savedConnections)
+	{
+		if (conn == ssid)
+		{
+			LOG(LogDebug) << "ApiSystem::isWifiConnectionSaved - connection '" << ssid << "' is saved";
+			return true;
+		}
+	}
+	LOG(LogDebug) << "ApiSystem::isWifiConnectionSaved - connection '" << ssid << "' is NOT saved";
+	return false;
+#endif
+}
+
+bool ApiSystem::connectSavedWifi(const std::string& connectionName)
+{
+	LOG(LogInfo) << "ApiSystem::connectSavedWifi(" << connectionName << ")";
+
+#if WIN32
+	return false;
+#else
+	// Escape single quotes in connectionName for shell
+	std::string escapedName = connectionName;
+	size_t pos = 0;
+	while ((pos = escapedName.find("'", pos)) != std::string::npos) {
+		escapedName.replace(pos, 1, "'\\''");
+		pos += 4;
+	}
+
+	std::string cmd = std::string(WIFI_SCRIPT_CONNECT_SAVED) + " '" + escapedName + "'";
+
+	LOG(LogInfo) << "ApiSystem::connectSavedWifi() - executing: " << cmd;
+
+	int ret = system(cmd.c_str());
+
+	LOG(LogInfo) << "ApiSystem::connectSavedWifi() - script returned: " << ret;
+
+	if (ret == -1) {
+		LOG(LogError) << "ApiSystem::connectSavedWifi() - system() failed to execute";
+		return false;
+	}
+
+	if (WIFEXITED(ret)) {
+		int exitStatus = WEXITSTATUS(ret);
+		LOG(LogInfo) << "ApiSystem::connectSavedWifi() - script exit status: " << exitStatus;
+		return (exitStatus == 0);
+	}
+
+	LOG(LogWarning) << "ApiSystem::connectSavedWifi() - script did not exit normally";
+	return false;
+#endif
+}
