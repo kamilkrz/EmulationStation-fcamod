@@ -25,7 +25,7 @@ struct ThemeDownloadInfo
 	std::string url;
 };
 
-class ApiSystem 
+class ApiSystem
 {
 public:
 	static UpdateState::State state;
@@ -45,9 +45,21 @@ public:
 	void	setBrighness(int value);
     BatteryInformation getBatteryInformation(bool summary = true);
 
+	// Network/WiFi functions
+	virtual std::string getIpAddress();
+	virtual bool ping();
+	virtual std::string getWifiStatus();
+	virtual std::string getConnectedSSID();
+	virtual std::vector<std::string> getWifiNetworks(bool scan = false);
+	virtual std::vector<std::string> getSavedWifiConnections();
+	virtual bool isWifiConnectionSaved(const std::string& ssid);
+	virtual bool enableWifi();
+	virtual bool connectWifi(const std::string& ssid, const std::string& key);
+	virtual bool connectSavedWifi(const std::string& connectionName);
+	virtual bool disableWifi();
+
 protected:
     static ApiSystem* instance;
 };
 
 #endif
-
